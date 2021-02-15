@@ -14,6 +14,8 @@ class Restaurant:
     NUM_OF_PAY_STATIONS = 1
     NUM_OF_PICKUP_STATIONS = 1
 
+    restaurantNumber = 0
+
     # Action times in minutes.
     meanOrderTime = 3.0
     meanFoodPrepTime = 6.0
@@ -25,6 +27,8 @@ class Restaurant:
 
     def __init__(self, env, orderStation, payStation, pickupStation):
         self.env = env
+        Restaurant.restaurantNumber += 1
+        self.restaurantNumber = Restaurant.restaurantNumber
         self.customerList = []
         self.totalCustomers = 0
         self.numCustomersLeft = 0
@@ -51,7 +55,7 @@ class Restaurant:
             yield env.timeout(t)
     
     # Average time a customer waited in the drive thru. Returns time in minutes.
-    # NOTE: Only call this function after the simulation has finished.
+    # NOTE: Value may not be accurate unless the simulation has already been ran.
     def calculateAverageDriveThruTime(self):
         averageTime = 0.0
 
@@ -66,12 +70,12 @@ class Restaurant:
 
 
     def printStats(self):
-        print("--------------------------------------- Stats ---------------------------------------")
+        print(f"--------------------------------------- Restaurant {self.restaurantNumber} Stats ---------------------------------------")
         print(f"{self.totalCustomers} potential customers..")
         print(f"{self.numCustomersLeft} customers left..")
         print(f"{self.numCustomersStayed} customers entered the line..\n")
         print(f"Average time spent in drive thru: {self.calculateAverageDriveThruTime()} minutes..")
-        print("-------------------------------------------------------------------------------------")
+        print("------------------------------------------------------------------------------------------------")
 
 
 
@@ -80,7 +84,7 @@ class Restaurant:
 #     restaurant: object of Restaurant class.
 class Customer:
     
-    # If true, print customer events to the console.
+    # If true, print customer events to the console. Use for debugging.
     isEventStampingOn = True
     customerNumber = 0
 
@@ -98,8 +102,8 @@ class Customer:
 
     # Start the simulation of customer going through drive thru line.
     def start(self):
-        # Enter the drive thru if there is enough space. Max of 7 customers in line plus the 1 at the order station.
-        if (len(self.restaurant.orderStation.queue) <= 8):
+        # Enter the drive thru if there is enough space. Max of 7 customers in line plus the 1 at each order station.
+        if (len(self.restaurant.orderStation.queue) <= (7 + self.restaurant.orderStation.capacity)):
 
             self.event_stamp(f"Customer {self.number} enters the line. {len(self.restaurant.orderStation.queue)} customers in order line.")
             self.enterTime = env.now
@@ -174,27 +178,29 @@ class Customer:
             print(f"{self.env.now} : {eventMessage}")
 
 
+
+SIMULATION_ITERATIONS = 5
 #random.seed(123456)
 
+# Do we want to print customer events to the console window?
 Customer.isEventStampingOn = False
 
+# Run the simulation the given amount of times..
+for iteration in range(0, SIMULATION_ITERATIONS):
 
-# Create the simulation environment.
-env = simpy.Environment()
+    # Create the simulation environment.
+    env = simpy.Environment()
 
+    # Establish restaurant resources.
+    orderStation = simpy.Resource(env, capacity=Restaurant.NUM_OF_ORDER_STATIONS)
+    payStation = simpy.Resource(env, capacity=Restaurant.NUM_OF_PAY_STATIONS)
+    pickupStation = simpy.Resource(env, capacity=Restaurant.NUM_OF_PICKUP_STATIONS)
 
-# Establish restaurant resources.
-orderStation = simpy.Resource(env, capacity=Restaurant.NUM_OF_ORDER_STATIONS)
-payStation = simpy.Resource(env, capacity=Restaurant.NUM_OF_PAY_STATIONS)
-pickupStation = simpy.Resource(env, capacity=Restaurant.NUM_OF_PICKUP_STATIONS)
+    # Generate the restaurant and the customers.
+    restaurant = Restaurant(env, orderStation, payStation, pickupStation)
+    customers = restaurant.generate_customers(50)
+    env.process(customers)
 
-# Generate the restaurant and the customers.
-restaurant = Restaurant(env, orderStation, payStation, pickupStation)
-customers = restaurant.generate_customers(500000000)
-env.process(customers)
-
-# Run for 120 minutes : 2 hours.
-env.run(120)
-
-
-restaurant.printStats()
+    # Run for 120 minutes : 2 hours.
+    env.run(120)
+    restaurant.printStats()

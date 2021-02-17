@@ -14,6 +14,9 @@ class Restaurant:
     NUM_OF_PAY_STATIONS = 1
     NUM_OF_PICKUP_STATIONS = 1
 
+    # Rate x / y where  x = number of customers for every y minutes.
+    CUSTOMER_ARRIVAL_RATE = 5.0 / 1.0
+
     restaurantNumber = 0
 
     # Action times in minutes.
@@ -21,9 +24,6 @@ class Restaurant:
     meanFoodPrepTime = 6.0
     meanPayTime = 2.0
     meanPickupTime = 2.0
-
-    # Rate x / y where  x = number of customers for every y minutes.
-    customerArrivalRate = 5.0 / 1.0
 
     def __init__(self, env, orderStation, payStation, pickupStation):
         self.env = env
@@ -51,31 +51,93 @@ class Restaurant:
             env.process(newCustomer.start())
 
             # Customer arrives every x minutes
-            t = random.expovariate(self.customerArrivalRate)
+            t = random.expovariate(Restaurant.CUSTOMER_ARRIVAL_RATE)
             yield env.timeout(t)
     
-    # Average time a customer waited in the drive thru. Returns time in minutes.
+    # Mean time a customer waited in the drive thru. Returns time in minutes.
     # NOTE: Value may not be accurate unless the simulation has already been ran.
-    def calculateAverageDriveThruTime(self):
-        averageTime = 0.0
+    def calculateMeanDriveThruTime(self):
+        meanTime = 0.0
 
         # customerList contains ALL potential customers, including those who entered the line AND those who left early..
         for person in self.customerList:
             if person.enterTime != -1.0 and person.exitTime != -1.0:
                 timeSpent = person.exitTime - person.enterTime
-                averageTime += timeSpent
+                meanTime += timeSpent
         
-        averageTime = float(averageTime / self.numCustomersStayed)
-        return averageTime
+        meanTime = float(meanTime / self.numCustomersStayed)
+        return meanTime
+    
+    # Mean time a customer took to order. Returns time in minutes.
+    # NOTE: Value may not be accurate unless the simulation has already been ran.
+    def calculateMeanOrderTime(self):
+        meanTime = 0.0
 
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.orderDuration != -1:
+                meanTime += person.orderDuration
+        
+        meanTime = float(meanTime / self.numCustomersStayed)
+        return meanTime
+
+    # Mean time it took for food to be prepared. Returns time in minutes.
+    # NOTE: Value may not be accurate unless the simulation has already been ran.
+    def calculateMeanPrepTime(self):
+        meanTime = 0.0
+
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.prepDuration != -1:
+                meanTime += person.prepDuration
+        
+        meanTime = float(meanTime / self.numCustomersStayed)
+        return meanTime
+
+    # Mean time a customer took to pay. Returns time in minutes.
+    # NOTE: Value may not be accurate unless the simulation has already been ran.
+    def calculateMeanPayTime(self):
+        meanTime = 0.0
+
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.payDuration != -1:
+                meanTime += person.payDuration
+        
+        meanTime = float(meanTime / self.numCustomersStayed)
+        return meanTime
+    
+    # Mean time a customer took to pickup. Returns time in minutes.
+    # NOTE: Value may not be accurate unless the simulation has already been ran.
+    def calculateMeanPickupTime(self):
+        meanTime = 0.0
+
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.pickupDuration != -1:
+                meanTime += person.pickupDuration
+        
+        meanTime = float(meanTime / self.numCustomersStayed)
+        return meanTime
 
     def printStats(self):
         print(f"--------------------------------------- Restaurant {self.restaurantNumber} Stats ---------------------------------------")
         print(f"{self.totalCustomers} potential customers..")
         print(f"{self.numCustomersLeft} customers left..")
         print(f"{self.numCustomersStayed} customers entered the line..\n")
-        print(f"Average time spent in drive thru: {self.calculateAverageDriveThruTime()} minutes..")
+        print(f"Average time spent in drive thru: {self.calculateMeanDriveThruTime()} minutes..")
+        print(f"Average time spent ordering: {self.calculateMeanOrderTime()} minutes..")
+        print(f"Average time spent preparing food: {self.calculateMeanPrepTime()} minutes..")
+        print(f"Average time spent paying: {self.calculateMeanPayTime()} minutes..")
+        print(f"Average time spent picking up food: {self.calculateMeanPickupTime()} minutes..")
         print("------------------------------------------------------------------------------------------------")
+
+
+
+
+
+
+
 
 
 
@@ -99,6 +161,10 @@ class Customer:
         # Note: If the customer leaves because the line is too long, these values will remain -1.0
         self.enterTime = -1.0
         self.exitTime = -1.0
+        self.orderDuration = -1.0
+        self.prepDuration = -1.0
+        self.payDuration = -1.0
+        self.pickupDuration = -1.0
 
     # Start the simulation of customer going through drive thru line.
     def start(self):
@@ -116,12 +182,14 @@ class Customer:
             # Enter the order station.
             self.event_stamp(f"Customer {self.number} is ordering.")
             delay = random.weibullvariate((1 / Restaurant.meanOrderTime), 1.5)
-            orderTime = simpy.events.Timeout(env, delay)
-            yield orderTime 
+            orderDelay = simpy.events.Timeout(env, delay)
+            self.orderDuration = delay
+            yield orderDelay
 
             # Start food prep.
             prepTimeDelay = random.weibullvariate((1 / Restaurant.meanFoodPrepTime), 2.0)
-            prepTime = simpy.events.Timeout(env, prepTimeDelay)
+            prepDelay = simpy.events.Timeout(env, prepTimeDelay)
+            self.prepDuration = prepTimeDelay
 
             # Wait until there is enough space to move forward. Max 4 between order and pay station, plus 1 in the pay station.
             if (len(self.restaurant.payStation.queue) >= 5):
@@ -139,8 +207,9 @@ class Customer:
             # Enter the pay station.
             self.event_stamp(f"Customer {self.number} is paying. {len(self.restaurant.payStation.queue)} customers in pay line.")
             delay = random.weibullvariate((1 / Restaurant.meanPayTime), 1.5)
-            payTime = simpy.events.Timeout(env, delay)
-            yield payTime
+            payDelay = simpy.events.Timeout(env, delay)
+            self.payDuration = delay
+            yield payDelay
 
             # Wait until there is enough space to move forward. Max 1 between pay and pickup station, plus 1 in the pickup station.
             if (len(self.restaurant.pickupStation.queue) >= 2):
@@ -158,9 +227,10 @@ class Customer:
             # Enter the pickup station.
             self.event_stamp(f"Customer {self.number} is picking up. {len(self.restaurant.pickupStation.queue)} customers in pickup line.")
             delay = random.weibullvariate((1 / Restaurant.meanPickupTime), 1.5)
-            pickupTime = simpy.events.Timeout(env, delay)
-            yield prepTime
-            yield pickupTime
+            pickupDelay = simpy.events.Timeout(env, delay)
+            self.pickupDuration = delay
+            yield prepDelay
+            yield pickupDelay
 
             # Finished picking up items, leave the pickup station.
             self.restaurant.pickupStation.release(pickup)
@@ -186,7 +256,7 @@ SIMULATION_ITERATIONS = 5
 Customer.isEventStampingOn = False
 
 # Run the simulation the given amount of times..
-for iteration in range(0, SIMULATION_ITERATIONS):
+for iteration in range(1, SIMULATION_ITERATIONS+1):
 
     # Create the simulation environment.
     env = simpy.Environment()
@@ -198,9 +268,8 @@ for iteration in range(0, SIMULATION_ITERATIONS):
 
     # Generate the restaurant and the customers.
     restaurant = Restaurant(env, orderStation, payStation, pickupStation)
-    customers = restaurant.generate_customers(50)
+    customers = restaurant.generate_customers(1000)
     env.process(customers)
 
-    # Run for 120 minutes : 2 hours.
-    env.run(120)
+    env.run()
     restaurant.printStats()

@@ -1,5 +1,7 @@
 import simpy
 import simpy.events
+import matplotlib.pyplot as plt
+import numpy as np
 import random
 
 
@@ -15,13 +17,13 @@ class Restaurant:
     NUM_OF_PICKUP_STATIONS = 1
 
     # Rate x / y where  x = number of customers for every y minutes.
-    CUSTOMER_ARRIVAL_RATE = 5.0 / 1.0
+    CUSTOMER_ARRIVAL_RATE = .5 / 1
 
     restaurantNumber = 0
 
     # Action times in minutes.
     meanOrderTime = 3.0
-    meanFoodPrepTime = 6.0
+    meanFoodPrepTime = 4.0
     meanPayTime = 2.0
     meanPickupTime = 2.0
 
@@ -120,6 +122,46 @@ class Restaurant:
         meanTime = float(meanTime / self.numCustomersStayed)
         return meanTime
 
+    def getOrderTimes(self):
+        times = []
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.orderDuration != -1:
+                times.append(person.orderDuration)
+        return times
+    
+    def getPayTimes(self):
+        times = []
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.payDuration != -1:
+                times.append(person.payDuration)
+        return times
+
+    def getPickupTimes(self):
+        times = []
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.pickupDuration != -1:
+                times.append(person.pickupDuration)
+        return times
+
+    def getPrepTimes(self):
+        times = []
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.prepDuration != -1:
+                times.append(person.prepDuration)
+        return times
+
+    def getCustomersThatStayed(self):
+        customers = []
+        # customerList contains ALL potential customers, including those who entered the line AND those who left early..
+        for person in self.customerList:
+            if person.enterTime != -1 and person.exitTime != -1:
+                customers.append(person)
+        return customers
+
     def printStats(self):
         print(f"--------------------------------------- Restaurant {self.restaurantNumber} Stats ---------------------------------------")
         print(f"{self.totalCustomers} potential customers..")
@@ -181,13 +223,13 @@ class Customer:
 
             # Enter the order station.
             self.event_stamp(f"Customer {self.number} is ordering.")
-            delay = random.weibullvariate((1 / Restaurant.meanOrderTime), 1.5)
+            delay = random.weibullvariate(Restaurant.meanOrderTime, 1.5)
             orderDelay = simpy.events.Timeout(env, delay)
             self.orderDuration = delay
             yield orderDelay
 
             # Start food prep.
-            prepTimeDelay = random.weibullvariate((1 / Restaurant.meanFoodPrepTime), 2.0)
+            prepTimeDelay = random.weibullvariate(Restaurant.meanFoodPrepTime, 2.0)
             prepDelay = simpy.events.Timeout(env, prepTimeDelay)
             self.prepDuration = prepTimeDelay
 
@@ -206,7 +248,7 @@ class Customer:
             
             # Enter the pay station.
             self.event_stamp(f"Customer {self.number} is paying. {len(self.restaurant.payStation.queue)} customers in pay line.")
-            delay = random.weibullvariate((1 / Restaurant.meanPayTime), 1.5)
+            delay = random.weibullvariate(Restaurant.meanPayTime, 1.5)
             payDelay = simpy.events.Timeout(env, delay)
             self.payDuration = delay
             yield payDelay
@@ -226,7 +268,7 @@ class Customer:
 
             # Enter the pickup station.
             self.event_stamp(f"Customer {self.number} is picking up. {len(self.restaurant.pickupStation.queue)} customers in pickup line.")
-            delay = random.weibullvariate((1 / Restaurant.meanPickupTime), 1.5)
+            delay = random.weibullvariate(Restaurant.meanPickupTime, 1.5)
             pickupDelay = simpy.events.Timeout(env, delay)
             self.pickupDuration = delay
             yield prepDelay
@@ -249,15 +291,19 @@ class Customer:
 
 
 
-SIMULATION_ITERATIONS = 5
-#random.seed(123456)
+
+
+
+
+SIMULATION_ITERATIONS = 10
+
 
 # Do we want to print customer events to the console window?
 Customer.isEventStampingOn = False
 
-# Run the simulation the given amount of times..
+# Each loop is a simulation.
 for iteration in range(1, SIMULATION_ITERATIONS+1):
-
+    
     # Create the simulation environment.
     env = simpy.Environment()
 
@@ -268,8 +314,8 @@ for iteration in range(1, SIMULATION_ITERATIONS+1):
 
     # Generate the restaurant and the customers.
     restaurant = Restaurant(env, orderStation, payStation, pickupStation)
-    customers = restaurant.generate_customers(1000)
+    customers = restaurant.generate_customers(5000)
     env.process(customers)
 
-    env.run()
+    env.run(120)
     restaurant.printStats()
